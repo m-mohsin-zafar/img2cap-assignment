@@ -1,4 +1,4 @@
-import torch
+#import torch
 import pandas as pd
 from collections import Counter
 import matplotlib.pyplot as plt
@@ -74,22 +74,29 @@ def build_vocab(cleaned_captions):
     Returns:
         vocab (Vocabulary): Vocabulary object
     """
-
     # QUESTION 1.1
-    # TODO collect words
-
+    # add the token words
+    
     # create a vocab instance
     vocab = Vocabulary()
-
-    # add the token words
     vocab.add_word('<pad>')
     vocab.add_word('<start>')
     vocab.add_word('<end>')
     vocab.add_word('<unk>')
+    
+    words = dict()
+    for caption in cleaned_captions: #iterate through all cleaned_caption
+        for word in caption.split(): #iterate over all words in a caption
+            # add the token words
+            if word not in words.keys():
+                words[word] = 1
+            else:
+                words[word] += 1
+                if words[word] > 3:
+                    vocab.add_word(word)
 
-    # TODO add the rest of the words from the cleaned captions here
-    # vocab.add_word('word')
-
+    print (vocab.idx)
+    
     return vocab
 
 
