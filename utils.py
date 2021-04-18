@@ -8,6 +8,8 @@ from nltk.translate.bleu_score import sentence_bleu
 from vocabulary import Vocabulary
 from config import *
 
+# Extra Imports
+from string import punctuation
 
 
 def read_lines(filepath):
@@ -18,10 +20,10 @@ def read_lines(filepath):
     file = open(filepath, 'r')
     lines = []
 
-    while True: 
+    while True:
         # Get next line from file 
-        line = file.readline() 
-        if not line: 
+        line = file.readline()
+        if not line:
             break
         lines.append(line.strip())
     file.close()
@@ -40,11 +42,27 @@ def parse_lines(lines):
     image_ids = []
     cleaned_captions = []
 
-
     # QUESTION 1.1
 
+    for line in lines:
+        id = line.split('\t')[0]
+        id = id.split('#')[0]
+        raw_caption = line.split('\t')[1]
+        caption = clean_caption(raw_caption)
+
+        image_ids.append(id)
+        cleaned_captions.append(caption)
 
     return image_ids, cleaned_captions
+
+
+def clean_caption(raw_caption):
+    caption = raw_caption.lower()
+    caption = ''.join(c for c in caption if c not in punctuation)
+    caption = ''.join(c for c in caption if not c.isdigit())
+    caption = caption.strip()
+
+    return caption
 
 
 def build_vocab(cleaned_captions):
@@ -60,7 +78,6 @@ def build_vocab(cleaned_captions):
     # QUESTION 1.1
     # TODO collect words
 
-
     # create a vocab instance
     vocab = Vocabulary()
 
@@ -73,9 +90,7 @@ def build_vocab(cleaned_captions):
     # TODO add the rest of the words from the cleaned captions here
     # vocab.add_word('word')
 
-
     return vocab
-
 
 
 def decode_caption(sampled_ids, vocab):
@@ -88,9 +103,7 @@ def decode_caption(sampled_ids, vocab):
     """
     predicted_caption = ""
 
-
     # QUESTION 2.1
-
 
     return predicted_caption
 
@@ -103,6 +116,8 @@ collate_fn() does not support merging the captions with padding.
 You can read more about it here:
 https://pytorch.org/docs/stable/data.html#dataloader-collate-fn. 
 """
+
+
 def caption_collate_fn(data):
     """ Creates mini-batch tensors from the list of tuples (image, caption).
     Args:
@@ -120,14 +135,12 @@ def caption_collate_fn(data):
 
     # merge images (from tuple of 3D tensor to 4D tensor).
     # if using features, 2D tensor to 3D tensor. (batch_size, 256)
-    images = torch.stack(images, 0) 
+    images = torch.stack(images, 0)
 
     # merge captions (from tuple of 1D tensor to 2D tensor).
     lengths = [len(cap) for cap in captions]
     targets = torch.zeros(len(captions), max(lengths)).long()
     for i, cap in enumerate(captions):
         end = lengths[i]
-        targets[i, :end] = cap[:end]        
+        targets[i, :end] = cap[:end]
     return images, targets, lengths
-
-

@@ -7,7 +7,6 @@ pretrained CNN.
 
 """
 
-
 import torch
 import numpy as np
 
@@ -19,11 +18,9 @@ from datasets import Flickr8k_Images
 from utils import *
 from config import *
 
-
-
 lines = read_lines(TOKEN_FILE_TRAIN)
 # see what is in lines
-# print(lines[:2])
+print(lines[:2])
 
 #########################################################################
 #
@@ -33,8 +30,8 @@ lines = read_lines(TOKEN_FILE_TRAIN)
 
 image_ids, cleaned_captions = parse_lines(lines)
 # to check the results after writing the cleaning function
-# print(image_ids[:2])
-# print(cleaned_captions[:2])
+print(image_ids[:2])
+print(cleaned_captions[:2])
 
 # vocab = build_vocab(cleaned_captions)
 # to check the results
@@ -43,13 +40,12 @@ image_ids, cleaned_captions = parse_lines(lines)
 # sample each image once
 image_ids = image_ids[::5]
 
-
 # crop size matches the input dimensions expected by the pre-trained ResNet
-data_transform = transforms.Compose([ 
-    transforms.Resize(224), 
-    transforms.CenterCrop(224), 
+data_transform = transforms.Compose([
+    transforms.Resize(224),
+    transforms.CenterCrop(224),
     transforms.ToTensor(),
-    transforms.Normalize((0.485, 0.456, 0.406),   # using ImageNet norms
+    transforms.Normalize((0.485, 0.456, 0.406),  # using ImageNet norms
                          (0.229, 0.224, 0.225))])
 
 dataset_train = Flickr8k_Images(
@@ -68,8 +64,6 @@ train_loader = torch.utils.data.DataLoader(
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model = EncoderCNN().to(device)
 
-
-
 #########################################################################
 #
 #        QUESTION 1.2 Extracting image features
@@ -77,13 +71,8 @@ model = EncoderCNN().to(device)
 #########################################################################
 features = []
 
-
-
 # TODO loop through all image data, extracting features and saving them
 # no gradients needed
-
-
-
 
 
 # to check your results, features should be dimensions [len(train_set), 2048]
@@ -91,8 +80,5 @@ features = []
 # print(features.shape)
 
 
-
 # save features
 torch.save(features, "features.pt")
-
-
