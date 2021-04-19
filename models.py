@@ -54,9 +54,7 @@ class DecoderRNN(nn.Module):
         embeddings = self.embed(captions)
         im_features = self.resize(features)
         im_features = self.bn(im_features)
-        #print (im_features.shape, embeddings.shape)
-        
-        #print (im_features.shape, embeddings.shape)
+
         embeddings = torch.cat((im_features.unsqueeze(1), embeddings), 1)
 
         # What is "packing" a sequence?

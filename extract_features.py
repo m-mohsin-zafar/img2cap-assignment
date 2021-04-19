@@ -71,7 +71,7 @@ model = EncoderCNN().to(device)
 #########################################################################
 features = []
 
-# TODO loop through all image data, extracting features and saving them
+# TODO (Done) loop through all image data, extracting features and saving them
 # no gradients needed
 
 for batch in train_loader:

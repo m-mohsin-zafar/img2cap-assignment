@@ -15,7 +15,6 @@ from torchvision import transforms
 from torch.nn.utils.rnn import pack_padded_sequence
 from PIL import Image
 
-
 from datasets import Flickr8k_Images, Flickr8k_Features
 from models import DecoderRNN, EncoderCNN
 from utils import *
@@ -27,20 +26,16 @@ from tqdm import tqdm
 # if false, train model; otherwise try loading model from checkpoint and evaluate
 EVAL = False
 
-
 # reconstruct the captions and vocab, just as in extract_features.py
 lines = read_lines(TOKEN_FILE_TRAIN)
 image_ids, cleaned_captions = parse_lines(lines)
 vocab = build_vocab(cleaned_captions)
 
-
 # device configuration
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-
 # initialize the models and set the learning parameters
 decoder = DecoderRNN(EMBED_SIZE, HIDDEN_SIZE, len(vocab), NUM_LAYERS).to(device)
-
 
 if not EVAL:
 
@@ -61,12 +56,11 @@ if not EVAL:
 
     train_loader = torch.utils.data.DataLoader(
         dataset_train,
-        batch_size=64, # change as needed
+        batch_size=64,  # change as needed
         shuffle=True,
-        num_workers=0, # may need to set to 0
-        collate_fn=caption_collate_fn, # explicitly overwrite the collate_fn
+        num_workers=0,  # may need to set to 0
+        collate_fn=caption_collate_fn,  # explicitly overwrite the collate_fn
     )
-
 
     # loss and optimizer
     criterion = nn.CrossEntropyLoss()
@@ -76,56 +70,64 @@ if not EVAL:
     print(len(cleaned_captions))
     print(features.shape)
 
+    #########################################################################
+    #
+    #        QUESTION 1.3 Training DecoderRNN
+    #
+    #########################################################################
 
-#########################################################################
-#
-#        QUESTION 1.3 Training DecoderRNN
-# 
-#########################################################################
-
-    # TODO write training loop on decoder here
+    # TODO (Done) write training loop on decoder here
 
     for epoch in range(NUM_EPOCHS):
-        # with tqdm(total=len(dataset_train), desc='Training Phase', unit=' img ', leave=True) as pbar:
-        for batch in train_loader:
-            image_features, targets, lengths = batch
-            # for each batch, prepare the targets using this torch.nn.utils.rnn function
-            check = pack_padded_sequence(targets, lengths, batch_first=True)            
-            outputs = decoder(image_features, targets, lengths)            
-            print(outputs.shape)
+        description = f'Training Phase: Epoch {epoch + 1} '
+        with tqdm(total=len(dataset_train), desc=description, unit=' img', leave=True) as pbar:
+            for batch in train_loader:
+                image_features, captions, lengths = batch
 
+                # for each batch, prepare the targets using this torch.nn.utils.rnn function
+                targets = pack_padded_sequence(captions, lengths, batch_first=True)[0]
 
+                # Zero out the gradients for optimizer to avoid accumulation
+                optimizer.zero_grad()
 
+                # Models forward pass
+                outputs = decoder(image_features, captions, lengths)
 
+                # Calculate Loss
+                loss = criterion(outputs, targets)
 
+                # Backpropagation of loss
+                loss.backward()
 
-    # save model after training
-    decoder_ckpt = torch.save(decoder, "decoder.ckpt")
+                # Weight Updates
+                optimizer.step()
 
+                # Update Visual Progress of tqdm
+                pbar.set_postfix(**{'Train CE Loss (running)': loss.item()})
+                pbar.update(image_features.shape[0])
 
+    # save model checkpoint after training
+    torch.save(decoder, "decoder.ckpt")
+    print('Checkpoint Saved!')
 
 # if we already trained, and EVAL == True, reload saved model
 else:
 
-    data_transform = transforms.Compose([ 
-        transforms.Resize(224),     
-        transforms.CenterCrop(224), 
+    data_transform = transforms.Compose([
+        transforms.Resize(224),
+        transforms.CenterCrop(224),
         transforms.ToTensor(),
-        transforms.Normalize((0.485, 0.456, 0.406),   # using ImageNet norms
+        transforms.Normalize((0.485, 0.456, 0.406),  # using ImageNet norms
                              (0.229, 0.224, 0.225))])
-
 
     test_lines = read_lines(TOKEN_FILE_TEST)
     test_image_ids, test_cleaned_captions = parse_lines(test_lines)
-
 
     # load models
     encoder = EncoderCNN().to(device)
     decoder = torch.load("decoder.ckpt").to(device)
     encoder.eval()
-    decoder.eval() # generate caption, eval mode to not influence batchnorm
-
-
+    decoder.eval()  # generate caption, eval mode to not influence batchnorm
 
 #########################################################################
 #
@@ -134,9 +136,8 @@ else:
 #########################################################################
 
 
-    # TODO define decode_caption() function in utils.py
-    # predicted_caption = decode_caption(word_ids, vocab)
-
+# TODO define decode_caption() function in utils.py
+# predicted_caption = decode_caption(word_ids, vocab)
 
 
 #########################################################################
@@ -146,8 +147,5 @@ else:
 #########################################################################
 
 
-    # Feel free to add helper functions to utils.py as needed,
-    # documenting what they do in the code and in your report
-
-
-
+# Feel free to add helper functions to utils.py as needed,
+# documenting what they do in the code and in your report

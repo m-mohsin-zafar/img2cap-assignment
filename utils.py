@@ -45,9 +45,13 @@ def parse_lines(lines):
     # QUESTION 1.1
 
     for line in lines:
+        # first we split the image id from caption text based on \t
         id = line.split('\t')[0]
+        # then we extract remove .jpg#x part from image id (where x = 1 to 5)
         id = id.split('.')[0]
+        # finally we extract raw text caption
         raw_caption = line.split('\t')[1]
+        # and forward to other function for cleaning the text
         caption = clean_caption(raw_caption)
 
         image_ids.append(id)
@@ -57,9 +61,13 @@ def parse_lines(lines):
 
 
 def clean_caption(raw_caption):
+    # convert to lower case
     caption = raw_caption.lower()
+    # remove punctuations / special characters
     caption = ''.join(c for c in caption if c not in punctuation)
+    # remove digits
     caption = ''.join(c for c in caption if not c.isdigit())
+    # remove extra spaces on left or right side of the string
     caption = caption.strip()
 
     return caption
@@ -75,15 +83,15 @@ def build_vocab(cleaned_captions):
         vocab (Vocabulary): Vocabulary object
     """
     # QUESTION 1.1
-    # add the token words
-    
+    # Here we Build a vocabulary
+
     # create a vocab instance
     vocab = Vocabulary()
-    
+
     words = dict()
-    for caption in cleaned_captions: #iterate through all cleaned_caption
-        for word in caption.split(): #iterate over all words in a caption
-            # add the token words
+    for caption in cleaned_captions:  # iterate through all cleaned_caption
+        for word in caption.split():  # iterate over all words in a caption
+            # add the token words to vocabulary if and only if the count of word is more than 3
             if word not in words.keys():
                 words[word] = 1
             else:
@@ -96,8 +104,8 @@ def build_vocab(cleaned_captions):
     vocab.add_word('<end>')
     vocab.add_word('<unk>')
 
-    print (vocab.idx)
-    
+    print(vocab.idx)
+
     return vocab
 
 
