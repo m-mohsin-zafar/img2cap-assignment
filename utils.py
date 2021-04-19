@@ -1,4 +1,4 @@
-#import torch
+import torch
 import pandas as pd
 from collections import Counter
 import matplotlib.pyplot as plt
@@ -79,10 +79,6 @@ def build_vocab(cleaned_captions):
     
     # create a vocab instance
     vocab = Vocabulary()
-    vocab.add_word('<pad>')
-    vocab.add_word('<start>')
-    vocab.add_word('<end>')
-    vocab.add_word('<unk>')
     
     words = dict()
     for caption in cleaned_captions: #iterate through all cleaned_caption
@@ -94,6 +90,11 @@ def build_vocab(cleaned_captions):
                 words[word] += 1
                 if words[word] > 3:
                     vocab.add_word(word)
+
+    vocab.add_word('<pad>')
+    vocab.add_word('<start>')
+    vocab.add_word('<end>')
+    vocab.add_word('<unk>')
 
     print (vocab.idx)
     

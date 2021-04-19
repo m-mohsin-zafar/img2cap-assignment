@@ -43,7 +43,7 @@ class DecoderRNN(nn.Module):
 
         # QUESTION 1.3 DecoderRNN - define this layer
         # TODO
-        # self.rnn = 
+        self.rnn = nn.RNN(embed_size, hidden_size, num_layers, batch_first=True)
 
         self.linear = nn.Linear(hidden_size, vocab_size)
         self.max_seq_length = max_seq_length
@@ -53,7 +53,9 @@ class DecoderRNN(nn.Module):
         embeddings = self.embed(captions)
         im_features = self.resize(features)
         im_features = self.bn(im_features)
-        embeddings = torch.cat((im_features.unsqueeze(1), embeddings), 1)
+        # embeddings = torch.cat((im_features.unsqueeze(1), embeddings), 1)
+        # Modified embeddings to accommodate shape
+        embeddings = torch.cat((im_features, embeddings), 1)
 
         # What is "packing" a sequence?
         packed = pack_padded_sequence(embeddings, lengths, batch_first=True)

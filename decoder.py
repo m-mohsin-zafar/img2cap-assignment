@@ -21,6 +21,9 @@ from models import DecoderRNN, EncoderCNN
 from utils import *
 from config import *
 
+# Extra Imports
+from tqdm import tqdm
+
 # if false, train model; otherwise try loading model from checkpoint and evaluate
 EVAL = False
 
@@ -60,7 +63,7 @@ if not EVAL:
         dataset_train,
         batch_size=64, # change as needed
         shuffle=True,
-        num_workers=2, # may need to set to 0
+        num_workers=0, # may need to set to 0
         collate_fn=caption_collate_fn, # explicitly overwrite the collate_fn
     )
 
@@ -82,10 +85,18 @@ if not EVAL:
 
     # TODO write training loop on decoder here
 
+    for epoch in range(NUM_EPOCHS):
+        # with tqdm(total=len(dataset_train), desc='Training Phase', unit=' img ', leave=True) as pbar:
+        for batch in train_loader:
+            image_features, targets, lengths = batch
+            # for each batch, prepare the targets using this torch.nn.utils.rnn function
+            check = pack_padded_sequence(targets, lengths, batch_first=True)
+            print(check)
+            print((check[0]))
+            targets = pack_padded_sequence(targets, lengths, batch_first=True)[0]
 
-    # for each batch, prepare the targets using this torch.nn.utils.rnn function
-    # targets = pack_padded_sequence(captions, lengths, batch_first=True)[0]
-
+            outputs = decoder(features, targets, lengths)
+            print('here')
 
 
 
