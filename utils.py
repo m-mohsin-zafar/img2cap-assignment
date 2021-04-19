@@ -46,7 +46,7 @@ def parse_lines(lines):
 
     for line in lines:
         id = line.split('\t')[0]
-        id = id.split('#')[0]
+        id = id.split('.')[0]
         raw_caption = line.split('\t')[1]
         caption = clean_caption(raw_caption)
 

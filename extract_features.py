@@ -33,9 +33,9 @@ image_ids, cleaned_captions = parse_lines(lines)
 print(image_ids[:2])
 print(cleaned_captions[:2])
 
-# vocab = build_vocab(cleaned_captions)
+vocab = build_vocab(cleaned_captions)
 # to check the results
-# print("Number of words in vocab:", vocab.idx)
+print("Number of words in vocab:", vocab.idx)
 
 # sample each image once
 image_ids = image_ids[::5]
@@ -57,7 +57,7 @@ train_loader = torch.utils.data.DataLoader(
     dataset_train,
     batch_size=64,
     shuffle=False,
-    num_workers=2,
+    num_workers=4,
 )
 
 # device configuration
@@ -74,10 +74,17 @@ features = []
 # TODO loop through all image data, extracting features and saving them
 # no gradients needed
 
+for batch in train_loader:
+    images = batch
+    images.to(device)
+    with torch.no_grad():
+        feats = model(images)
+        features.append(feats.flatten(start_dim=1))
 
 # to check your results, features should be dimensions [len(train_set), 2048]
 # convert features to a PyTorch Tensor before saving
-# print(features.shape)
+features = torch.cat(features, dim=0)
+print(features.shape)
 
 
 # save features
