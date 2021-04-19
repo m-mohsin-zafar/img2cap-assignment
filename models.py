@@ -1,5 +1,6 @@
 """ Encoder and decoder models """
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torchvision.models as models
@@ -53,9 +54,10 @@ class DecoderRNN(nn.Module):
         embeddings = self.embed(captions)
         im_features = self.resize(features)
         im_features = self.bn(im_features)
-        # embeddings = torch.cat((im_features.unsqueeze(1), embeddings), 1)
-        # Modified embeddings to accommodate shape
-        embeddings = torch.cat((im_features, embeddings), 1)
+        #print (im_features.shape, embeddings.shape)
+        
+        #print (im_features.shape, embeddings.shape)
+        embeddings = torch.cat((im_features.unsqueeze(1), embeddings), 1)
 
         # What is "packing" a sequence?
         packed = pack_padded_sequence(embeddings, lengths, batch_first=True)

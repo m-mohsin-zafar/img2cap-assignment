@@ -90,13 +90,9 @@ if not EVAL:
         for batch in train_loader:
             image_features, targets, lengths = batch
             # for each batch, prepare the targets using this torch.nn.utils.rnn function
-            check = pack_padded_sequence(targets, lengths, batch_first=True)
-            print(check)
-            print((check[0]))
-            targets = pack_padded_sequence(targets, lengths, batch_first=True)[0]
-
-            outputs = decoder(features, targets, lengths)
-            print('here')
+            check = pack_padded_sequence(targets, lengths, batch_first=True)            
+            outputs = decoder(image_features, targets, lengths)            
+            print(outputs.shape)
 
 
 
