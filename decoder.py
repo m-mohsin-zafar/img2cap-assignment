@@ -22,9 +22,10 @@ from config import *
 
 # Extra Imports
 from tqdm import tqdm
+import pandas as pd
 
 # if false, train model; otherwise try loading model from checkpoint and evaluate
-EVAL = False
+EVAL = True
 
 # reconstruct the captions and vocab, just as in extract_features.py
 lines = read_lines(TOKEN_FILE_TRAIN)
@@ -135,10 +136,53 @@ else:
 # 
 #########################################################################
 
+    # Reference Vocabulary in accordance with train data
+    train_lines = read_lines(TOKEN_FILE_TRAIN)
+    train_image_ids, train_cleaned_captions = parse_lines(train_lines)
+    ref_vocab = build_vocab(train_cleaned_captions)
 
-# TODO define decode_caption() function in utils.py
-# predicted_caption = decode_caption(word_ids, vocab)
+    dataset_test = Flickr8k_Images(
+        image_ids=test_image_ids[::5],
+        transform=data_transform,
+    )
 
+    test_loader = torch.utils.data.DataLoader(
+        dataset_test,
+        batch_size=64,
+        shuffle=False,
+        num_workers=0,
+    )
+
+    predictions = []
+
+    with tqdm(total=len(dataset_test), desc='Testing Phase', unit=' img', leave=True) as pbar:
+        for images in test_loader:
+            images.to(device)
+            with torch.no_grad():
+                # 1. Pass the Images through Encoder to obtain Encoded Representation of Images
+                encoded_features = encoder(images)
+                encoded_features = encoded_features.flatten(start_dim=1)
+                # 2. Sample out the captions from Decoder by passing encoded feature vector
+                sampled_ids = decoder.sample(encoded_features)
+                predictions.append(sampled_ids)
+
+                pbar.update(images.shape[0])
+
+    predictions = torch.cat(predictions, dim=0)
+
+    predicted_captions = []
+    for word_ids in predictions:
+        # TODO (Done) define decode_caption() function in utils.py
+        decoded_caption = decode_caption(word_ids.numpy(), ref_vocab, remove_tags=True)
+        predicted_captions.append(decoded_caption)
+
+    data = {
+        'id': dataset_test.image_ids,
+        'caption': predicted_captions
+    }
+
+    test_predictions_df = pd.DataFrame(data)
+    test_predictions_df.to_csv('test_predictions.csv', index=False)
 
 #########################################################################
 #

@@ -91,12 +91,12 @@ def build_vocab(cleaned_captions):
     words = dict()
     for caption in cleaned_captions:  # iterate through all cleaned_caption
         for word in caption.split():  # iterate over all words in a caption
-            # add the token words to vocabulary if and only if the count of word is more than 3
+            # add the token words to vocabulary if and only if the count of word is more than MIN_FREQUENCY i.e. 3
             if word not in words.keys():
                 words[word] = 1
             else:
                 words[word] += 1
-                if words[word] > 3:
+                if words[word] > MIN_FREQUENCY:
                     vocab.add_word(word)
 
     vocab.add_word('<pad>')
@@ -109,7 +109,7 @@ def build_vocab(cleaned_captions):
     return vocab
 
 
-def decode_caption(sampled_ids, vocab):
+def decode_caption(sampled_ids, vocab, remove_tags=False):
     """ 
     Args:
         sampled_ids (int list): list of word IDs from decoder
@@ -117,9 +117,15 @@ def decode_caption(sampled_ids, vocab):
     Return:
         predicted_caption (str): predicted string sentence
     """
-    predicted_caption = ""
 
     # QUESTION 2.1
+
+    predicted_caption = ' '.join(vocab.idx2word[id] for id in sampled_ids)
+    index_for_end = predicted_caption.find('<end>')
+    predicted_caption = predicted_caption[: index_for_end+5]
+
+    if remove_tags:
+        predicted_caption = predicted_caption[7:index_for_end].strip()
 
     return predicted_caption
 
