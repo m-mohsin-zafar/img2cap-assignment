@@ -1,7 +1,10 @@
 import torch
 import pandas as pd
+import numpy as np
 from collections import Counter
 import matplotlib.pyplot as plt
+from scipy.spatial.distance import cosine
+from sklearn.metrics.pairwise import cosine_similarity
 
 from nltk.translate.bleu_score import sentence_bleu
 
@@ -11,6 +14,20 @@ from config import *
 # Extra Imports
 from string import punctuation
 
+def listed_captions(cleaned_captions, vocab):
+    for caption in range(len(cleaned_captions)):
+        caption_encoded = []
+        for word in cleaned_captions[caption].split():
+            caption_encoded.append((word))
+        cleaned_captions[caption] = caption_encoded
+    return cleaned_captions
+
+def combine_im_captions(image_ids, cleaned_captions, vocab):
+    cleaned_caption = listed_captions(cleaned_captions, vocab)
+    two_cols = pd.DataFrame([image_ids, cleaned_caption]).T
+    two_cols.columns = ['image_ids', 'captions']
+    two_cols = two_cols.groupby(['image_ids'])['captions'].apply(list).reset_index()
+    return two_cols
 
 def read_lines(filepath):
     """ Open the ground truth captions into memory, line by line. 
@@ -139,6 +156,13 @@ You can read more about it here:
 https://pytorch.org/docs/stable/data.html#dataloader-collate-fn. 
 """
 
+def CosineSimilarity(references, caption, vocab):
+    score = []
+    caption_vector = [1 if w in caption else 0 for w in list(vocab.word2idx.keys())]
+    for reference in references:
+        reference_vector = [1 if w in reference else 0 for w in list(vocab.word2idx.keys())]
+        score.append(cosine(reference_vector, caption_vector))
+    return np.mean(score)
 
 def caption_collate_fn(data):
     """ Creates mini-batch tensors from the list of tuples (image, caption).

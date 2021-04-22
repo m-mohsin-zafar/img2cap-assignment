@@ -9,6 +9,9 @@ python decoder.py
 
 import torch
 import numpy as np
+from nltk.translate.bleu_score import sentence_bleu
+from nltk.translate.bleu_score import corpus_bleu
+from sklearn.metrics.pairwise import cosine_similarity
 
 import torch.nn as nn
 from torchvision import transforms
@@ -19,6 +22,7 @@ from datasets import Flickr8k_Images, Flickr8k_Features
 from models import DecoderRNN, EncoderCNN
 from utils import *
 from config import *
+from scipy.spatial.distance import cosine
 
 # Extra Imports
 from tqdm import tqdm
@@ -26,7 +30,9 @@ import pandas as pd
 
 # if false, train model; otherwise try loading model from checkpoint and evaluate
 EVAL = True
-
+scoring = True
+predicted_captions = []
+    
 # reconstruct the captions and vocab, just as in extract_features.py
 lines = read_lines(TOKEN_FILE_TRAIN)
 image_ids, cleaned_captions = parse_lines(lines)
@@ -112,7 +118,7 @@ if not EVAL:
     print('Checkpoint Saved!')
 
 # if we already trained, and EVAL == True, reload saved model
-else:
+elif not scoring:
 
     data_transform = transforms.Compose([
         transforms.Resize(224),
@@ -170,26 +176,60 @@ else:
 
     predictions = torch.cat(predictions, dim=0)
 
-    predicted_captions = []
     for word_ids in predictions:
         # TODO (Done) define decode_caption() function in utils.py
         decoded_caption = decode_caption(word_ids.numpy(), ref_vocab, remove_tags=True)
-        predicted_captions.append(decoded_caption)
+        predicted_captions.append(decoded_caption.split())
 
     data = {
         'id': dataset_test.image_ids,
         'caption': predicted_captions
     }
-
+    
     test_predictions_df = pd.DataFrame(data)
     test_predictions_df.to_csv('test_predictions.csv', index=False)
+    test_predictions_df.to_json('test_predictions.json', index=False)
 
+else:
 #########################################################################
 #
 #        QUESTION 2.2-3 Caption evaluation via text similarity 
 # 
 #########################################################################
 
-
-# Feel free to add helper functions to utils.py as needed,
-# documenting what they do in the code and in your report
+    # Read Reference Captions from Test File; and Clean the captions.
+    lines = read_lines(TOKEN_FILE_TEST)
+    image_ids, cleaned_captions = parse_lines(lines)
+    im_captions_list = combine_im_captions(image_ids, cleaned_captions, vocab)
+    
+    bleu_statistics, cos_statistics = [], []
+    
+    # Load Predictions from the model
+    test_predictions_df = pd.read_json("test_predictions.json")
+    
+    # For Each Image this Loop will run
+    for record in (test_predictions_df['id']):
+        
+        # Filter out reference captions for this 'record' image.
+        references = (im_captions_list[im_captions_list['image_ids'] == record]['captions']).to_list()[0]
+        
+        # extract candidate caption for this 'record' image.
+        predictions = (test_predictions_df[test_predictions_df['id'] == record]['caption']).to_list()[0]
+        
+        # compute cosine similarity score and prepare a list
+        cos_score = 1 - CosineSimilarity(references, predictions, vocab)                #2.3
+        cos_statistics.append([record, references, predictions, cos_score])
+        
+        # compute BLEU score for reference captions and candidate caption; and prepare a list
+        bleu_score = sentence_bleu(references, predictions, weights=(1, 1, 1, 0))   #2.2
+        bleu_statistics.append([record, references, predictions, bleu_score])
+    
+    # Export as a DataFrame
+    cos_statistics = pd.DataFrame(cos_statistics, columns = ['image_ids', 'Reference', 'Predicted', 'Cos_Sim Score'])
+    cos_statistics.to_csv("cosine_score_results.csv")
+    
+    # Export as a DataFrame
+    bleu_statistics = pd.DataFrame(bleu_statistics, columns = ['image_ids', 'Reference', 'Predicted', 'BLEU Score'])
+    bleu_statistics.to_csv("blue_score_results1110.csv")
+    #mean_score = (corpus_bleu(im_captions_list['captions'], np.array(predicted_captions)))
+    #print ("corpus mean score is : ", bleu_statistics['Reference'].mean())
