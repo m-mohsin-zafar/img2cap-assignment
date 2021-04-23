@@ -9,30 +9,29 @@ python decoder.py
 
 import torch
 import numpy as np
-from nltk.translate.bleu_score import sentence_bleu
-from nltk.translate.bleu_score import corpus_bleu
+from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
 from sklearn.metrics.pairwise import cosine_similarity
 
 import torch.nn as nn
 from torchvision import transforms
 from torch.nn.utils.rnn import pack_padded_sequence
-from PIL import Image
 
 from datasets import Flickr8k_Images, Flickr8k_Features
 from models import DecoderRNN, EncoderCNN
 from utils import *
 from config import *
-from scipy.spatial.distance import cosine
 
 # Extra Imports
 from tqdm import tqdm
 import pandas as pd
+import warnings
+
+warnings.filterwarnings("ignore")
 
 # if false, train model; otherwise try loading model from checkpoint and evaluate
 EVAL = True
-scoring = True
-predicted_captions = []
-    
+COMPARE_BUT_NOT_EVAL = True
+
 # reconstruct the captions and vocab, just as in extract_features.py
 lines = read_lines(TOKEN_FILE_TRAIN)
 image_ids, cleaned_captions = parse_lines(lines)
@@ -118,7 +117,7 @@ if not EVAL:
     print('Checkpoint Saved!')
 
 # if we already trained, and EVAL == True, reload saved model
-elif not scoring:
+elif not COMPARE_BUT_NOT_EVAL:
 
     data_transform = transforms.Compose([
         transforms.Resize(224),
@@ -136,11 +135,11 @@ elif not scoring:
     encoder.eval()
     decoder.eval()  # generate caption, eval mode to not influence batchnorm
 
-#########################################################################
-#
-#        QUESTION 2.1 Generating predictions on test data
-# 
-#########################################################################
+    #########################################################################
+    #
+    #        QUESTION 2.1 Generating predictions on test data
+    #
+    #########################################################################
 
     # Reference Vocabulary in accordance with train data
     train_lines = read_lines(TOKEN_FILE_TRAIN)
@@ -159,8 +158,7 @@ elif not scoring:
         num_workers=0,
     )
 
-    predictions = []
-
+    raw_predictions = []
     with tqdm(total=len(dataset_test), desc='Testing Phase', unit=' img', leave=True) as pbar:
         for images in test_loader:
             images.to(device)
@@ -170,66 +168,110 @@ elif not scoring:
                 encoded_features = encoded_features.flatten(start_dim=1)
                 # 2. Sample out the captions from Decoder by passing encoded feature vector
                 sampled_ids = decoder.sample(encoded_features)
-                predictions.append(sampled_ids)
+                raw_predictions.append(sampled_ids)
 
                 pbar.update(images.shape[0])
 
-    predictions = torch.cat(predictions, dim=0)
+    raw_predictions = torch.cat(raw_predictions, dim=0)
 
-    for word_ids in predictions:
+    predicted_captions = []
+
+    for word_ids in raw_predictions:
         # TODO (Done) define decode_caption() function in utils.py
         decoded_caption = decode_caption(word_ids.numpy(), ref_vocab, remove_tags=True)
-        predicted_captions.append(decoded_caption.split())
+        predicted_captions.append(decoded_caption)
 
     data = {
         'id': dataset_test.image_ids,
         'caption': predicted_captions
     }
-    
+
     test_predictions_df = pd.DataFrame(data)
     test_predictions_df.to_csv('test_predictions.csv', index=False)
-    test_predictions_df.to_json('test_predictions.json', index=False)
+    test_predictions_df.to_json('test_predictions.json', orient='records')
 
-else:
-#########################################################################
-#
-#        QUESTION 2.2-3 Caption evaluation via text similarity 
-# 
-#########################################################################
+elif COMPARE_BUT_NOT_EVAL:
+    #########################################################################
+    #
+    #        QUESTION 2.2-3 Caption evaluation via text similarity
+    #
+    #########################################################################
+
+    decoder = torch.load("decoder.ckpt").to(device)
+    decoder.eval()  # generate caption, eval mode to not influence batchnorm
 
     # Read Reference Captions from Test File; and Clean the captions.
     lines = read_lines(TOKEN_FILE_TEST)
     image_ids, cleaned_captions = parse_lines(lines)
-    im_captions_list = combine_im_captions(image_ids, cleaned_captions, vocab)
-    
+
+    captions_LoW_bleu = process_captions(image_ids, cleaned_captions)
+    captions_list_cos = process_captions(image_ids, cleaned_captions, vocab, for_cosine=True)
+
     bleu_statistics, cos_statistics = [], []
-    
+
     # Load Predictions from the model
     test_predictions_df = pd.read_json("test_predictions.json")
-    
+
+    # bleu individual n-grams
+    n_grams = {
+        '1-gram': (1, 0, 0, 0),
+        '2-gram': (0, 1, 0, 0),
+        '3-gram': (0, 0, 1, 0),
+        '4-gram': (0, 0, 0, 1),
+        'cumulative': (0.25, 0.25, 0.25, 0.25)
+    }
+
     # For Each Image this Loop will run
-    for record in (test_predictions_df['id']):
-        
+    for record in tqdm(test_predictions_df['id']):
+
         # Filter out reference captions for this 'record' image.
-        references = (im_captions_list[im_captions_list['image_ids'] == record]['captions']).to_list()[0]
-        
+        references_bleu = (captions_LoW_bleu[captions_LoW_bleu['id'] == record]['captions']).to_list()[0]
+        references = (captions_list_cos[captions_list_cos['id'] == record]['captions']).to_list()[0]
+
         # extract candidate caption for this 'record' image.
         predictions = (test_predictions_df[test_predictions_df['id'] == record]['caption']).to_list()[0]
-        
+        # for cosine similarity we convert the predicted caption to corresponding list of word ids
+        predictions_cos = captions_to_LoWIdx([predictions], vocab)
+
+        # Next we get word embeddings
+        references_cos = get_word_embeddings(deepcopy(references), decoder)
+        predictions_cos = get_word_embeddings(predictions_cos, decoder)
+
+        # Computing the Mean Embedding Vector for Each
+        references_cos = get_mean_embedding_vector(references_cos)
+        predictions_cos = get_mean_embedding_vector(predictions_cos)
+
         # compute cosine similarity score and prepare a list
-        cos_score = 1 - CosineSimilarity(references, predictions, vocab)                #2.3
-        cos_statistics.append([record, references, predictions, cos_score])
-        
+        cos_score = cosine_similarity(predictions_cos[0], np.array(references_cos).squeeze())  # 2.3
+        cos_statistics.append(
+            [record, predictions, cos_score.mean()] + [val for pair in zip(references_bleu, cos_score[0]) for val in
+                                                       pair])
+
         # compute BLEU score for reference captions and candidate caption; and prepare a list
-        bleu_score = sentence_bleu(references, predictions, weights=(1, 1, 1, 0))   #2.2
-        bleu_statistics.append([record, references, predictions, bleu_score])
-    
+        bleu_scores = []
+        for w in n_grams.keys():
+            bleu_score = sentence_bleu(references_bleu, predictions.split(), weights=n_grams[w])  # 2.2
+            bleu_scores.append(bleu_score)
+
+        # bleu scores with smoothing function
+        chencherry = SmoothingFunction()
+        bleu_scores_smoothed = []
+        for w in n_grams.keys():
+            bleu_score = sentence_bleu(references_bleu, predictions.split(), weights=n_grams[w],
+                                       smoothing_function=chencherry.method1)  # 2.2
+            bleu_scores_smoothed.append(bleu_score)
+        bleu_statistics.append([record, references_bleu, predictions] + bleu_scores + bleu_scores_smoothed)
+
     # Export as a DataFrame
-    cos_statistics = pd.DataFrame(cos_statistics, columns = ['image_ids', 'Reference', 'Predicted', 'Cos_Sim Score'])
-    cos_statistics.to_csv("cosine_score_results.csv")
-    
+    cos_statistics = pd.DataFrame(cos_statistics,
+                                  columns=['id', 'prediction', 'mean_cosine_score', 'ref_cap_1', 'cos_scr_1',
+                                           'ref_cap_2', 'cos_scr_2', 'ref_cap_3', 'cos_scr_3', 'ref_cap_4', 'cos_scr_4',
+                                           'ref_cap_5', 'cos_scr_5'])
+    cos_statistics.to_csv("cosine_score_results_final.csv", index=False)
+
     # Export as a DataFrame
-    bleu_statistics = pd.DataFrame(bleu_statistics, columns = ['image_ids', 'Reference', 'Predicted', 'BLEU Score'])
-    bleu_statistics.to_csv("blue_score_results1110.csv")
-    #mean_score = (corpus_bleu(im_captions_list['captions'], np.array(predicted_captions)))
-    #print ("corpus mean score is : ", bleu_statistics['Reference'].mean())
+    bleu_cols = [k for k in n_grams.keys()]
+    bleu_cols_smoothed = [k + '_smoothed' for k in n_grams.keys()]
+    bleu_statistics = pd.DataFrame(bleu_statistics,
+                                   columns=['id', 'reference', 'predicted'] + bleu_cols + bleu_cols_smoothed)
+    bleu_statistics.to_csv("bleu_score_results.csv", index=False)

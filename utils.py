@@ -1,33 +1,14 @@
 import torch
 import pandas as pd
 import numpy as np
-from collections import Counter
-import matplotlib.pyplot as plt
-from scipy.spatial.distance import cosine
-from sklearn.metrics.pairwise import cosine_similarity
-
-from nltk.translate.bleu_score import sentence_bleu
 
 from vocabulary import Vocabulary
 from config import *
 
 # Extra Imports
 from string import punctuation
+from copy import deepcopy
 
-def listed_captions(cleaned_captions, vocab):
-    for caption in range(len(cleaned_captions)):
-        caption_encoded = []
-        for word in cleaned_captions[caption].split():
-            caption_encoded.append((word))
-        cleaned_captions[caption] = caption_encoded
-    return cleaned_captions
-
-def combine_im_captions(image_ids, cleaned_captions, vocab):
-    cleaned_caption = listed_captions(cleaned_captions, vocab)
-    two_cols = pd.DataFrame([image_ids, cleaned_caption]).T
-    two_cols.columns = ['image_ids', 'captions']
-    two_cols = two_cols.groupby(['image_ids'])['captions'].apply(list).reset_index()
-    return two_cols
 
 def read_lines(filepath):
     """ Open the ground truth captions into memory, line by line. 
@@ -138,11 +119,13 @@ def decode_caption(sampled_ids, vocab, remove_tags=False):
     # QUESTION 2.1
 
     predicted_caption = ' '.join(vocab.idx2word[id] for id in sampled_ids)
-    index_for_end = predicted_caption.find('<end>')
-    predicted_caption = predicted_caption[: index_for_end+5]
 
     if remove_tags:
-        predicted_caption = predicted_caption[7:index_for_end].strip()
+        if '<start>' in predicted_caption:
+            predicted_caption = predicted_caption.replace('<start>', '')
+        if '<end>' in predicted_caption:
+            predicted_caption = predicted_caption.replace('<end>', '')
+        predicted_caption = predicted_caption.strip()
 
     return predicted_caption
 
@@ -156,13 +139,6 @@ You can read more about it here:
 https://pytorch.org/docs/stable/data.html#dataloader-collate-fn. 
 """
 
-def CosineSimilarity(references, caption, vocab):
-    score = []
-    caption_vector = [1 if w in caption else 0 for w in list(vocab.word2idx.keys())]
-    for reference in references:
-        reference_vector = [1 if w in reference else 0 for w in list(vocab.word2idx.keys())]
-        score.append(cosine(reference_vector, caption_vector))
-    return np.mean(score)
 
 def caption_collate_fn(data):
     """ Creates mini-batch tensors from the list of tuples (image, caption).
@@ -190,3 +166,48 @@ def caption_collate_fn(data):
         end = lengths[i]
         targets[i, :end] = cap[:end]
     return images, targets, lengths
+
+
+#########################################################################
+#
+#                   QUESTION 2.2-3 Utility Functions
+#
+#########################################################################
+
+def captions_to_LoW(cleaned_captions):
+    proc_caps = cleaned_captions
+    for caption in range(len(proc_caps)):
+        proc_caps[caption] = [word for word in proc_caps[caption].split()]
+    return proc_caps
+
+
+def captions_to_LoWIdx(cleaned_captions, vocab):
+    proc_caps = cleaned_captions
+    for caption in range(len(proc_caps)):
+        proc_caps[caption] = [vocab(word) for word in proc_caps[caption].split()]
+    return proc_caps
+
+
+def process_captions(image_ids, cleaned_captions, vocab=None, for_cosine=False):
+    if not for_cosine:
+        processed_captions = captions_to_LoW(deepcopy(cleaned_captions))
+    else:
+        processed_captions = captions_to_LoWIdx(deepcopy(cleaned_captions), vocab)
+
+    df = pd.DataFrame([image_ids, processed_captions]).T
+    df.columns = ['id', 'captions']
+    df = df.groupby(['id'])['captions'].apply(list).reset_index()
+
+    return df
+
+
+def get_word_embeddings(list_of_caps, model):
+    caps = deepcopy(list_of_caps)
+    for c in range(len(caps)):
+        with torch.no_grad():
+            caps[c] = [model.embed(torch.tensor(word_idx)).unsqueeze(0) for word_idx in caps[c]]
+    return caps
+
+
+def get_mean_embedding_vector(vecs):
+    return [torch.cat(cap).mean(dim=0).reshape(1, -1).detach().numpy() for cap in vecs]
