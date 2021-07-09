@@ -1,13 +1,13 @@
 import torch
 import pandas as pd
-from collections import Counter
-import matplotlib.pyplot as plt
-
-from nltk.translate.bleu_score import sentence_bleu
+import numpy as np
 
 from vocabulary import Vocabulary
 from config import *
 
+# Extra Imports
+from string import punctuation
+from copy import deepcopy
 
 
 def read_lines(filepath):
@@ -18,10 +18,10 @@ def read_lines(filepath):
     file = open(filepath, 'r')
     lines = []
 
-    while True: 
+    while True:
         # Get next line from file 
-        line = file.readline() 
-        if not line: 
+        line = file.readline()
+        if not line:
             break
         lines.append(line.strip())
     file.close()
@@ -40,11 +40,35 @@ def parse_lines(lines):
     image_ids = []
     cleaned_captions = []
 
-
     # QUESTION 1.1
 
+    for line in lines:
+        # first we split the image id from caption text based on \t
+        id = line.split('\t')[0]
+        # then we extract remove .jpg#x part from image id (where x = 1 to 5)
+        id = id.split('.')[0]
+        # finally we extract raw text caption
+        raw_caption = line.split('\t')[1]
+        # and forward to other function for cleaning the text
+        caption = clean_caption(raw_caption)
+
+        image_ids.append(id)
+        cleaned_captions.append(caption)
 
     return image_ids, cleaned_captions
+
+
+def clean_caption(raw_caption):
+    # convert to lower case
+    caption = raw_caption.lower()
+    # remove punctuations / special characters
+    caption = ''.join(c for c in caption if c not in punctuation)
+    # remove digits
+    caption = ''.join(c for c in caption if not c.isdigit())
+    # remove extra spaces on left or right side of the string
+    caption = caption.strip()
+
+    return caption
 
 
 def build_vocab(cleaned_captions):
@@ -56,29 +80,34 @@ def build_vocab(cleaned_captions):
     Returns:
         vocab (Vocabulary): Vocabulary object
     """
-
     # QUESTION 1.1
-    # TODO collect words
-
+    # Here we Build a vocabulary
 
     # create a vocab instance
     vocab = Vocabulary()
 
-    # add the token words
+    words = dict()
+    for caption in cleaned_captions:  # iterate through all cleaned_caption
+        for word in caption.split():  # iterate over all words in a caption
+            # add the token words to vocabulary if and only if the count of word is more than MIN_FREQUENCY i.e. 3
+            if word not in words.keys():
+                words[word] = 1
+            else:
+                words[word] += 1
+                if words[word] > MIN_FREQUENCY:
+                    vocab.add_word(word)
+
     vocab.add_word('<pad>')
     vocab.add_word('<start>')
     vocab.add_word('<end>')
     vocab.add_word('<unk>')
 
-    # TODO add the rest of the words from the cleaned captions here
-    # vocab.add_word('word')
-
+    print(vocab.idx)
 
     return vocab
 
 
-
-def decode_caption(sampled_ids, vocab):
+def decode_caption(sampled_ids, vocab, remove_tags=False):
     """ 
     Args:
         sampled_ids (int list): list of word IDs from decoder
@@ -86,11 +115,17 @@ def decode_caption(sampled_ids, vocab):
     Return:
         predicted_caption (str): predicted string sentence
     """
-    predicted_caption = ""
-
 
     # QUESTION 2.1
 
+    predicted_caption = ' '.join(vocab.idx2word[id] for id in sampled_ids)
+
+    if remove_tags:
+        if '<start>' in predicted_caption:
+            predicted_caption = predicted_caption.replace('<start>', '')
+        if '<end>' in predicted_caption:
+            predicted_caption = predicted_caption.replace('<end>', '')
+        predicted_caption = predicted_caption.strip()
 
     return predicted_caption
 
@@ -103,6 +138,8 @@ collate_fn() does not support merging the captions with padding.
 You can read more about it here:
 https://pytorch.org/docs/stable/data.html#dataloader-collate-fn. 
 """
+
+
 def caption_collate_fn(data):
     """ Creates mini-batch tensors from the list of tuples (image, caption).
     Args:
@@ -120,14 +157,57 @@ def caption_collate_fn(data):
 
     # merge images (from tuple of 3D tensor to 4D tensor).
     # if using features, 2D tensor to 3D tensor. (batch_size, 256)
-    images = torch.stack(images, 0) 
+    images = torch.stack(images, 0)
 
     # merge captions (from tuple of 1D tensor to 2D tensor).
     lengths = [len(cap) for cap in captions]
     targets = torch.zeros(len(captions), max(lengths)).long()
     for i, cap in enumerate(captions):
         end = lengths[i]
-        targets[i, :end] = cap[:end]        
+        targets[i, :end] = cap[:end]
     return images, targets, lengths
 
 
+#########################################################################
+#
+#                   QUESTION 2.2-3 Utility Functions
+#
+#########################################################################
+
+def captions_to_LoW(cleaned_captions):
+    proc_caps = cleaned_captions
+    for caption in range(len(proc_caps)):
+        proc_caps[caption] = [word for word in proc_caps[caption].split()]
+    return proc_caps
+
+
+def captions_to_LoWIdx(cleaned_captions, vocab):
+    proc_caps = cleaned_captions
+    for caption in range(len(proc_caps)):
+        proc_caps[caption] = [vocab(word) for word in proc_caps[caption].split()]
+    return proc_caps
+
+
+def process_captions(image_ids, cleaned_captions, vocab=None, for_cosine=False):
+    if not for_cosine:
+        processed_captions = captions_to_LoW(deepcopy(cleaned_captions))
+    else:
+        processed_captions = captions_to_LoWIdx(deepcopy(cleaned_captions), vocab)
+
+    df = pd.DataFrame([image_ids, processed_captions]).T
+    df.columns = ['id', 'captions']
+    df = df.groupby(['id'])['captions'].apply(list).reset_index()
+
+    return df
+
+
+def get_word_embeddings(list_of_caps, model):
+    caps = deepcopy(list_of_caps)
+    for c in range(len(caps)):
+        with torch.no_grad():
+            caps[c] = [model.embed(torch.tensor(word_idx)).unsqueeze(0) for word_idx in caps[c]]
+    return caps
+
+
+def get_mean_embedding_vector(vecs):
+    return [torch.cat(cap).mean(dim=0).reshape(1, -1).detach().numpy() for cap in vecs]

@@ -5,11 +5,10 @@ from torch.utils.data import Dataset
 from config import IMAGE_DIR
 
 
-
 class Flickr8k_Images(Dataset):
     """ Flickr8k custom dataset to read image data only,
         compatible with torch.utils.data.DataLoader. """
-    
+
     def __init__(self, image_ids, transform=None):
         """ Set the path for images, captions and vocabulary wrapper.
         
@@ -19,7 +18,6 @@ class Flickr8k_Images(Dataset):
         """
         self.image_ids = image_ids
         self.transform = transform
-
 
     def __getitem__(self, index):
         """ Returns image. """
@@ -39,7 +37,7 @@ class Flickr8k_Images(Dataset):
 
 class Flickr8k_Features(Dataset):
     """ Flickr8k custom dataset with features and vocab, compatible with torch.utils.data.DataLoader. """
-    
+
     def __init__(self, image_ids, captions, vocab, features):
         """ Set the path for images, captions and vocabulary wrapper.
         
@@ -68,7 +66,7 @@ class Flickr8k_Features(Dataset):
         caption.extend([self.vocab(token) for token in tokens])
         caption.append(self.vocab('<end>'))
         target = torch.Tensor(caption)
-        
+
         return image_features, target
 
     def __len__(self):

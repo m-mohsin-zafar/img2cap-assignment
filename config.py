@@ -15,7 +15,7 @@ environment.
 # path to caption data
 CAPTION_DIR = ""
 # path to images
-IMAGE_DIR = ""
+IMAGE_DIR = "Flickr8k_Dataset/Flicker8k_Dataset/"
 
 # token file names to read from
 TOKEN_FILE_TRAIN = CAPTION_DIR + "Flickr8k_train.token.txt"
